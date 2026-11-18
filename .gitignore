@@ -1,0 +1,14 @@
+# Video sources & temporary zips
+*.zip
+*.mp4
+clip1frame/
+clip2frame/
+clip3frame/
+flowclipframe/
+
+# System and logs
+*.log
+.DS_Store
+Thumbs.db
+node_modules/
+.vscode/

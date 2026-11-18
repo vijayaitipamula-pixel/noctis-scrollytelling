@@ -1,0 +1,1334 @@
+/* ==========================================================================
+   NOCTIS — Minimalist Scrollytelling Brand Site
+   Design Tokens & Strict Style Rules:
+   - Flat solid colours only. NO gradients of any kind.
+   - NO glassmorphism, NO backdrop-filter, NO blur, NO drop-shadows.
+   - NO rounded bubbly cards, NO emojis.
+   - 1px hairlines, photography and precision typography.
+   ========================================================================== */
+
+:root {
+  /* Design Tokens */
+  --asphalt: #07080A;     /* Page background & dark void */
+  --graphite: #121418;    /* Subtly lifted surface */
+  --fog: #8A8F98;         /* Subdued tertiary text & labels */
+  --bone: #EDEAE4;        /* Primary text */
+  --xenon: #CFE3FF;       /* Light accent & headlights */
+  --taillight: #E1251B;   /* Active red accent tick */
+  --hairline: rgba(237, 234, 228, 0.12); /* 1px structural borders */
+
+  /* Typography */
+  --font-display: 'Archivo', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-hud: 'JetBrains Mono', monospace;
+
+  /* Easing */
+  --ease-precision: cubic-bezier(0.16, 1, 0.3, 1);
+  --speed-normal: 0.7s;
+  --speed-fast: 0.25s;
+}
+
+/* Reset & Box Sizing */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Root & Body */
+html {
+  background-color: var(--asphalt);
+  color: var(--bone);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: clip; /* Avoid breaking position: sticky */
+  scroll-behavior: auto; /* Handled smoothly by rAF */
+}
+
+body {
+  background-color: var(--asphalt);
+  color: var(--bone);
+  min-height: 100vh;
+  overflow-x: clip; /* Do NOT use overflow: hidden here */
+  position: relative;
+}
+
+/* Typography Classes */
+.font-display {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 300;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.font-body {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: clamp(15px, 1.1vw, 17px);
+  line-height: 1.6;
+  max-width: 52ch;
+  color: var(--fog);
+}
+
+.font-hud {
+  font-family: var(--font-hud);
+  font-weight: 400;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--fog);
+}
+
+/* Links & Interactive Base */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Focus States */
+:focus-visible {
+  outline: 1px solid var(--xenon);
+  outline-offset: 4px;
+}
+
+/* ==========================================================================
+   FILM GRAIN OVERLAY (Fixed, procedural monochrome noise tile shifted ~8/s)
+   ========================================================================== */
+.film-grain {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0.035; /* 3.5% opacity */
+}
+
+/* ==========================================================================
+   CUSTOM CURSOR ("The Headlight", Desktop Only)
+   ========================================================================== */
+@media (pointer: fine) and (hover: hover) {
+  body {
+    cursor: none;
+  }
+  a, button, [role="button"], input, .clickable {
+    cursor: none;
+  }
+}
+
+.cursor-headlight {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 10000;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.cursor-headlight.active {
+  opacity: 1;
+}
+
+/* Default state: 6px solid xenon dot inside 28px ring with 1px xenon stroke */
+.cursor-ring {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--xenon);
+  border-radius: 50%;
+  position: absolute;
+  transition: width 0.25s var(--ease-precision),
+              height 0.25s var(--ease-precision),
+              border-radius 0.25s var(--ease-precision),
+              border-color 0.15s ease,
+              background-color 0.15s ease;
+}
+
+.cursor-dot {
+  width: 6px;
+  height: 6px;
+  background-color: var(--xenon);
+  border-radius: 50%;
+  position: absolute;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* Morph state: 44x2px horizontal light bar with tiny mono label */
+.cursor-headlight.morph .cursor-ring {
+  width: 44px;
+  height: 2px;
+  border: none;
+  background-color: var(--xenon);
+  border-radius: 0;
+}
+
+.cursor-headlight.morph .cursor-dot {
+  opacity: 0;
+  transform: scale(0);
+}
+
+.cursor-label {
+  position: absolute;
+  left: 56px;
+  font-family: var(--font-hud);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--xenon);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.2s ease, transform 0.2s var(--ease-precision);
+}
+
+.cursor-headlight.morph .cursor-label {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Mousedown: bar turns brighter for 120ms */
+.cursor-headlight.down .cursor-ring {
+  background-color: #FFFFFF;
+}
+.cursor-headlight.down .cursor-dot {
+  background-color: #FFFFFF;
+}
+
+/* ==========================================================================
+   PRELOADER
+   ========================================================================== */
+.preloader {
+  position: fixed;
+  inset: 0;
+  background-color: var(--asphalt);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.8s var(--ease-precision), visibility 0.8s;
+}
+
+.preloader.fade-out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.preloader-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  width: 280px;
+}
+
+.preloader-wordmark {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 300;
+  font-size: 24px;
+  letter-spacing: 0.2em;
+  color: var(--bone);
+}
+
+.preloader-line-wrap {
+  width: 100%;
+  height: 1px;
+  background-color: var(--hairline);
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.preloader-line {
+  position: absolute;
+  height: 1px;
+  width: 0%;
+  background-color: var(--xenon);
+  transition: width 0.1s linear, background-color 0.12s ease;
+}
+
+.preloader-line.flash {
+  background-color: #FFFFFF;
+}
+
+.preloader-counter {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  color: var(--fog);
+  letter-spacing: 0.16em;
+}
+
+/* ==========================================================================
+   NAVIGATION (Fixed, transparent, mix-blend-mode: difference)
+   ========================================================================== */
+.site-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 72px;
+  padding: 0 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 1000;
+  mix-blend-mode: difference;
+  transition: transform 0.4s var(--ease-precision);
+}
+
+.site-nav.hidden {
+  transform: translateY(-100%);
+}
+
+.nav-brand {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 300;
+  font-size: 18px;
+  letter-spacing: 0.15em;
+  color: var(--bone);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+}
+
+.nav-link {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--bone);
+  position: relative;
+  padding-bottom: 2px;
+}
+
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0%;
+  height: 1px;
+  background-color: var(--xenon);
+  transition: width 0.3s var(--ease-precision);
+}
+
+.nav-link:hover::after {
+  width: 100%;
+}
+
+/* ==========================================================================
+   HEADLINE REVEALS (Overflow hidden mask, line slides up 100%)
+   ========================================================================== */
+.reveal-mask {
+  overflow: hidden;
+  display: block;
+}
+
+.reveal-mask > * {
+  transform: translateY(100%);
+  transition: transform 0.9s var(--ease-precision), opacity 0.9s var(--ease-precision);
+  opacity: 0;
+}
+
+.reveal-mask.revealed > * {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* ==========================================================================
+   PINNED SCROLLYTELLING SECTIONS (Hero & Dismantle)
+   ========================================================================== */
+.scrolly-wrapper {
+  position: relative;
+  width: 100%;
+  background-color: var(--asphalt);
+  /* Height is dynamically set in config / inline style */
+}
+
+.scrolly-stage {
+  position: sticky;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+  background-color: var(--asphalt);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scrolly-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 1;
+}
+
+/* Bottom 1px Xenon Progress Line */
+.scrolly-progress-line {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  width: 0%;
+  background-color: var(--xenon);
+  z-index: 20;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   SECTION 1 — HERO
+   ========================================================================== */
+/* Left-edge HUD */
+.hero-hud {
+  position: absolute;
+  left: 40px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  pointer-events: none;
+}
+
+.hud-chapter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-tick {
+  width: 2px;
+  height: 10px;
+  background-color: var(--taillight);
+  display: inline-block;
+}
+
+.hud-telemetry {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 1px solid var(--hairline);
+  padding-left: 12px;
+}
+
+.hud-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hud-val {
+  color: var(--bone);
+  font-size: 13px;
+  font-feature-settings: 'tnum' on, 'lnum' on;
+}
+
+/* Hero Overlay Chapters (Placed in sky, never over the car) */
+.hero-chapters-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.hero-chapter {
+  position: absolute;
+  top: 14vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 1200px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.5s ease, visibility 0.5s;
+  text-align: center;
+}
+
+.hero-chapter.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* Chapter 1 */
+.chapter-1 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.hero-brand-title {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 300;
+  font-size: clamp(52px, 10vw, 140px);
+  letter-spacing: 0.08em;
+  line-height: 0.95;
+  color: var(--bone);
+  text-transform: uppercase;
+}
+
+.hero-brand-sub {
+  font-family: var(--font-body);
+  color: var(--fog);
+  font-size: clamp(16px, 1.4vw, 20px);
+  margin-top: 4px;
+}
+
+.scroll-hint {
+  margin-top: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.scroll-hint-bar {
+  width: 1px;
+  height: 28px;
+  background-color: var(--xenon);
+  animation: pulseLine 2s infinite ease-in-out;
+}
+
+@keyframes pulseLine {
+  0%, 100% { transform: scaleY(0.4); opacity: 0.3; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
+/* Chapter 2 & 3: Quiet Statements */
+.chapter-statement {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 300;
+  font-size: clamp(32px, 4.5vw, 68px);
+  line-height: 1.15;
+  color: var(--bone);
+  max-width: 22ch;
+  margin: 0 auto;
+}
+
+/* Chapter 4: GT-E Specs Reveal */
+.chapter-4 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.chapter-model-title {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 400;
+  font-size: clamp(48px, 8vw, 110px);
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.chapter-specs {
+  font-family: var(--font-hud);
+  font-size: clamp(11px, 1vw, 13px);
+  color: var(--fog);
+  letter-spacing: 0.16em;
+}
+
+.chapter-action-link {
+  margin-top: 18px;
+  font-family: var(--font-hud);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--xenon);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--xenon);
+  padding-bottom: 4px;
+  transition: color var(--speed-fast) ease, border-color var(--speed-fast) ease;
+}
+
+.chapter-action-link:hover {
+  color: #FFFFFF;
+  border-color: #FFFFFF;
+}
+
+/* ==========================================================================
+   SECTION 2 — STATEMENT (Not pinned, 100vh)
+   ========================================================================== */
+.statement-section {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 40px;
+  background-color: var(--asphalt);
+  position: relative;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.statement-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 36px;
+}
+
+.statement-tag {
+  color: var(--fog);
+}
+
+.statement-text {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 300;
+  font-size: clamp(34px, 5.2vw, 84px);
+  line-height: 1.15;
+  color: var(--bone);
+  text-transform: uppercase;
+}
+
+.statement-word {
+  display: inline-block;
+  opacity: 0.15;
+  transition: opacity 0.25s linear;
+  margin-right: 0.28em;
+}
+
+.statement-word:last-child {
+  margin-right: 0;
+}
+
+/* ==========================================================================
+   SECTION 3 — DISMANTLE (Pinned, ~350vh)
+   ========================================================================== */
+.dismantle-header {
+  position: absolute;
+  top: 40px;
+  left: 40px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.dismantle-title {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 300;
+  font-size: clamp(28px, 4vw, 56px);
+  color: var(--bone);
+  text-transform: uppercase;
+}
+
+/* Dismantle Interactive Callouts */
+.dismantle-callouts-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.callout-anchor {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.6s var(--ease-precision), visibility 0.6s;
+  pointer-events: auto;
+}
+
+.callout-anchor.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* 4px Xenon Dot on the Part */
+.callout-dot {
+  width: 6px;
+  height: 6px;
+  background-color: var(--xenon);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* SVG 1px Hairline connector */
+.callout-svg {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+  top: 0;
+  left: 0;
+}
+
+.callout-line {
+  stroke: var(--hairline);
+  stroke-width: 1px;
+  fill: none;
+}
+
+/* Callout Text Content */
+.callout-content {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.callout-code {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--xenon);
+}
+
+.callout-title {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--bone);
+}
+
+/* ==========================================================================
+   SECTION 4 — LINEUP (Hover Accordion, Not Pinned, 100vh)
+   ========================================================================== */
+.lineup-section {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--asphalt);
+  position: relative;
+  overflow: hidden;
+  border-top: 1px solid var(--hairline);
+}
+
+.lineup-header {
+  padding: 40px 40px 24px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--hairline);
+  flex-shrink: 0;
+}
+
+.lineup-heading {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 300;
+  font-size: clamp(24px, 3.2vw, 44px);
+  color: var(--bone);
+  text-transform: uppercase;
+}
+
+.lineup-container {
+  display: flex;
+  width: 100%;
+  flex: 1;
+  position: relative;
+}
+
+/* Vertical Slide Accordion */
+.lineup-slide {
+  position: relative;
+  flex-grow: 1;
+  flex-basis: 0;
+  border-right: 1px solid var(--hairline);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 32px 28px;
+  background-color: var(--asphalt);
+  transition: flex-grow 0.7s var(--ease-precision);
+  text-align: left;
+  user-select: none;
+}
+
+.lineup-slide:last-child {
+  border-right: none;
+}
+
+/* Closed state: ~12vw wide */
+.lineup-slide:not(.active) {
+  flex-grow: 1;
+}
+
+/* Open state: ~52vw */
+.lineup-slide.active {
+  flex-grow: 4.8;
+}
+
+/* Slide Header */
+.slide-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  z-index: 5;
+}
+
+.slide-number {
+  font-family: var(--font-hud);
+  font-size: 13px;
+  color: var(--fog);
+}
+
+/* Rotated model name in closed slide */
+.slide-vertical-name {
+  font-family: var(--font-hud);
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: var(--fog);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  margin-top: 40px;
+  transition: opacity 0.3s ease;
+}
+
+.lineup-slide.active .slide-vertical-name {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Open slide title */
+.slide-active-title {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 400;
+  font-size: clamp(36px, 4.5vw, 68px);
+  color: var(--bone);
+  text-transform: uppercase;
+  line-height: 1;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.5s var(--ease-precision) 0.1s, transform 0.5s var(--ease-precision) 0.1s;
+}
+
+.lineup-slide.active .slide-active-title {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Shared Floor Line at 72% height */
+.slide-floor-line {
+  position: absolute;
+  top: 72%;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background-color: var(--hairline);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Car Image */
+.slide-image-wrap {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.slide-image {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: filter 0.6s var(--ease-precision),
+              transform 0.7s var(--ease-precision),
+              opacity 0.6s var(--ease-precision);
+}
+
+/* Closed slide image styling: tight cropped on front light bar, 25% brightness, grayscale */
+.lineup-slide:not(.active) .slide-image {
+  object-position: 86% center;
+  filter: brightness(0.25) grayscale(1);
+  transform: scale(1.1);
+  opacity: 0.6;
+}
+
+/* Open slide image styling: full brightness, slides in 6% from left */
+.lineup-slide.active .slide-image {
+  object-position: center 72%;
+  filter: brightness(1) grayscale(0);
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.lineup-slide.just-activated .slide-image {
+  animation: slideInCar 0.7s var(--ease-precision) forwards;
+}
+
+@keyframes slideInCar {
+  0% { transform: translateX(-6%); }
+  100% { transform: translateX(0); }
+}
+
+/* Open Slide Content Under the Car */
+.slide-bottom {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.5s var(--ease-precision) 0.15s, transform 0.5s var(--ease-precision) 0.15s;
+}
+
+.lineup-slide.active .slide-bottom {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.lineup-slide:not(.active) .slide-bottom {
+  display: none;
+}
+
+.slide-tagline {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--fog);
+}
+
+/* 3-Column Mono Specs Row */
+.slide-specs-row {
+  display: flex;
+  gap: 32px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 14px;
+}
+
+.slide-spec-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.slide-spec-val {
+  font-family: var(--font-hud);
+  font-size: 14px;
+  color: var(--bone);
+  font-feature-settings: 'tnum' on, 'lnum' on;
+}
+
+/* Swatches & Configure Link */
+.slide-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+}
+
+.slide-swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.swatch-btn {
+  width: 12px;
+  height: 12px;
+  border: 1px solid transparent;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.swatch-btn.active {
+  border-color: var(--bone);
+  transform: scale(1.15);
+}
+
+.slide-configure-link {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--xenon);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--xenon);
+  padding-bottom: 2px;
+  transition: color var(--speed-fast) ease, border-color var(--speed-fast) ease;
+}
+
+.slide-configure-link:hover {
+  color: #FFFFFF;
+  border-color: #FFFFFF;
+}
+
+/* Initial slide-up animation when Lineup scrolls into view */
+.lineup-slide {
+  transform: translateY(40px);
+  opacity: 0;
+  transition: transform 0.8s var(--ease-precision), opacity 0.8s var(--ease-precision), flex-grow 0.7s var(--ease-precision);
+}
+
+.lineup-section.revealed .lineup-slide {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.lineup-section.revealed .lineup-slide:nth-child(1) { transition-delay: 0.00s; }
+.lineup-section.revealed .lineup-slide:nth-child(2) { transition-delay: 0.08s; }
+.lineup-section.revealed .lineup-slide:nth-child(3) { transition-delay: 0.16s; }
+.lineup-section.revealed .lineup-slide:nth-child(4) { transition-delay: 0.24s; }
+.lineup-section.revealed .lineup-slide:nth-child(5) { transition-delay: 0.32s; }
+
+/* ==========================================================================
+   SECTION 5 — RESERVE (100vh)
+   ========================================================================== */
+.reserve-section {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--asphalt);
+  position: relative;
+  padding: 80px 40px;
+  text-align: center;
+  border-top: 1px solid var(--hairline);
+}
+
+.reserve-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  max-width: 640px;
+}
+
+.reserve-title {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 300;
+  font-size: clamp(40px, 7vw, 96px);
+  color: var(--bone);
+  text-transform: uppercase;
+  line-height: 1.05;
+}
+
+.reserve-body {
+  font-family: var(--font-body);
+  color: var(--fog);
+  font-size: clamp(15px, 1.2vw, 17px);
+}
+
+/* Button: thin xenon outline with mono label RESERVE YOUR NOCTIS */
+.reserve-btn {
+  margin-top: 16px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  padding: 0 44px;
+  border: 1px solid var(--xenon);
+  background: transparent;
+  color: var(--xenon);
+  font-family: var(--font-hud);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  transition: background-color var(--speed-fast) var(--ease-precision),
+              color var(--speed-fast) var(--ease-precision);
+  overflow: hidden;
+}
+
+/* Taillight-red 2px tick appearing at the left on hover */
+.reserve-btn::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background-color: var(--taillight);
+  transform: scaleY(0);
+  transition: transform var(--speed-fast) var(--ease-precision);
+}
+
+.reserve-btn:hover {
+  background-color: var(--xenon);
+  color: var(--asphalt);
+}
+
+.reserve-btn:hover::before {
+  transform: scaleY(1);
+}
+
+/* ==========================================================================
+   FOOTER
+   ========================================================================== */
+.site-footer {
+  border-top: 1px solid var(--hairline);
+  background-color: var(--asphalt);
+  padding: 80px 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 64px;
+}
+
+.footer-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 48px;
+}
+
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.footer-wordmark {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 300;
+  font-size: 28px;
+  letter-spacing: 0.15em;
+  color: var(--bone);
+}
+
+.footer-desc {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  color: var(--fog);
+  letter-spacing: 0.14em;
+}
+
+.footer-nav-cols {
+  display: flex;
+  gap: 64px;
+  flex-wrap: wrap;
+}
+
+.footer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.footer-col-title {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  color: var(--bone);
+  letter-spacing: 0.16em;
+  margin-bottom: 4px;
+}
+
+.footer-link {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  color: var(--fog);
+  letter-spacing: 0.12em;
+  transition: color var(--speed-fast) ease;
+}
+
+.footer-link:hover {
+  color: var(--bone);
+}
+
+.footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+  padding-top: 32px;
+  font-family: var(--font-hud);
+  font-size: 11px;
+  color: var(--fog);
+  letter-spacing: 0.12em;
+}
+
+/* ==========================================================================
+   MOBILE & RESPONSIVE RULES (< 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .site-nav {
+    padding: 0 20px;
+    height: 60px;
+  }
+
+  .nav-links {
+    gap: 20px;
+  }
+
+  .hero-hud {
+    left: 20px;
+    top: auto;
+    bottom: 28px;
+    transform: none;
+    flex-direction: row;
+    gap: 20px;
+  }
+
+  .hud-telemetry {
+    flex-direction: row;
+    gap: 16px;
+    padding-left: 10px;
+  }
+
+  .hero-chapter {
+    top: 10vh;
+    width: 92%;
+  }
+
+  .statement-section {
+    padding: 60px 20px;
+  }
+
+  .dismantle-header {
+    top: 24px;
+    left: 20px;
+  }
+
+  /* Accordion mobile: Stack slides vertically as 72px rows */
+  .lineup-section {
+    height: auto;
+    min-height: auto;
+  }
+
+  .lineup-header {
+    padding: 24px 20px 16px;
+  }
+
+  .lineup-container {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .lineup-slide {
+    width: 100%;
+    min-height: 72px;
+    border-right: none;
+    border-bottom: 1px solid var(--hairline);
+    padding: 20px;
+    transition: height 0.5s var(--ease-precision);
+  }
+
+  .lineup-slide:not(.active) {
+    height: 72px;
+    flex-grow: 0;
+  }
+
+  .lineup-slide.active {
+    height: 540px;
+    flex-grow: 0;
+  }
+
+  .slide-vertical-name {
+    writing-mode: horizontal-tb;
+    transform: none;
+    margin-top: 0;
+    margin-left: 24px;
+  }
+
+  .lineup-slide:not(.active) .slide-top {
+    align-items: center;
+  }
+
+  .slide-specs-row {
+    gap: 16px;
+  }
+
+  .site-footer {
+    padding: 48px 20px 32px;
+    gap: 40px;
+  }
+
+  .footer-nav-cols {
+    gap: 36px;
+  }
+
+  .footer-bottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+
+/* ==========================================================================
+   ACCESSIBILITY: PREFERS-REDUCED-MOTION
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  body {
+    cursor: auto !important;
+  }
+
+  .cursor-headlight {
+    display: none !important;
+  }
+
+  /* No pinning, display in normal static flow */
+  .scrolly-wrapper {
+    height: auto !important;
+  }
+
+  .scrolly-stage {
+    position: relative !important;
+    height: 100vh !important;
+  }
+
+  .reveal-mask > * {
+    transform: none !important;
+    opacity: 1 !important;
+  }
+
+  .hero-chapter {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    transform: none !important;
+    margin: 40px auto !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  .lineup-slide {
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
