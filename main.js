@@ -99,11 +99,13 @@
     state.hero.canvas = document.getElementById('heroCanvas');
     state.hero.ctx = state.hero.canvas.getContext('2d', { alpha: false });
     state.hero.progressLine = document.getElementById('heroProgressLine');
+    state.hero.cfg = CONFIG.frames.hero;
 
     state.dismantle.wrapper = document.getElementById('dismantle');
     state.dismantle.canvas = document.getElementById('dismantleCanvas');
     state.dismantle.ctx = state.dismantle.canvas.getContext('2d', { alpha: false });
     state.dismantle.progressLine = document.getElementById('dismantleProgressLine');
+    state.dismantle.cfg = CONFIG.frames.dismantle;
 
     state.lineup.container = document.getElementById('lineupContainer');
 
@@ -141,7 +143,75 @@
     resizeFilmGrain();
     // Force redraw on next rAF
     state.hero.lastDrawnFrame = -1;
+    state.hero.needsRedraw = true;
     state.dismantle.lastDrawnFrame = -1;
+    state.dismantle.needsRedraw = true;
+  }
+
+  /* ==========================================================================
+     CONCURRENT ASSET LOADING ENGINE WITH PRIORITY QUEUE
+     ========================================================================== */
+  class ConcurrentQueue {
+    constructor(concurrency = 8) {
+      this.concurrency = concurrency;
+      this.running = 0;
+      this.queue = [];
+    }
+
+    add(fn, highPriority = false) {
+      if (highPriority) {
+        this.queue.unshift(fn);
+      } else {
+        this.queue.push(fn);
+      }
+      this.next();
+    }
+
+    next() {
+      while (this.running < this.concurrency && this.queue.length > 0) {
+        const fn = this.queue.shift();
+        this.running++;
+        fn().finally(() => {
+          this.running--;
+          this.next();
+        });
+      }
+    }
+  }
+
+  const assetQueue = new ConcurrentQueue(8);
+
+  function loadSingleFrame(sectionObj, frameNum, highPriority = false) {
+    const frameIdx = frameNum - 1;
+    if (frameIdx < 0 || frameIdx >= sectionObj.cfg.count) return;
+    if (sectionObj.loaded[frameIdx] || sectionObj.loading[frameIdx]) return;
+
+    sectionObj.loading[frameIdx] = true;
+    assetQueue.add(() => {
+      return new Promise((resolve) => {
+        const pathTemplate = state.isMobile ? sectionObj.cfg.mobilePath : sectionObj.cfg.desktopPath;
+        const img = new Image();
+        sectionObj.images[frameIdx] = img;
+        img.src = getFramePath(pathTemplate, frameNum);
+
+        const onDone = () => {
+          sectionObj.loaded[frameIdx] = true;
+          sectionObj.loading[frameIdx] = false;
+          // If frame is near current target or last draw was not exact, mark for redraw
+          if (Math.abs(sectionObj.currentFrame - frameIdx) < 8 || !sectionObj.isExactDrawn) {
+            sectionObj.needsRedraw = true;
+          }
+          resolve();
+        };
+
+        if (img.decode) {
+          img.decode().then(onDone).catch(onDone);
+        } else {
+          img.onload = onDone;
+          img.onerror = onDone;
+        }
+      });
+    }, highPriority);
   }
 
   /* ==========================================================================
@@ -152,128 +222,126 @@
     const preloaderLine = document.getElementById('preloaderLine');
     const preloaderCounter = document.getElementById('preloaderCounter');
 
-    const heroCfg = CONFIG.frames.hero;
-    const initialBatchCount = heroCfg.preloadInitial || 40;
-    const pathTemplate = state.isMobile ? heroCfg.mobilePath : heroCfg.desktopPath;
+    const heroTotal = CONFIG.frames.hero.count;
+    const dismantleTotal = CONFIG.frames.dismantle.count;
 
-    let loadedCount = 0;
-    const heroTotal = heroCfg.count;
-
-    // Allocate frame arrays
+    // Allocate frame arrays and state trackers
     state.hero.images = new Array(heroTotal);
     state.hero.loaded = new Array(heroTotal).fill(false);
+    state.hero.loading = new Array(heroTotal).fill(false);
+    state.hero.isExactDrawn = false;
+    state.hero.needsRedraw = false;
 
-    state.dismantle.images = new Array(CONFIG.frames.dismantle.count);
-    state.dismantle.loaded = new Array(CONFIG.frames.dismantle.count).fill(false);
+    state.dismantle.images = new Array(dismantleTotal);
+    state.dismantle.loaded = new Array(dismantleTotal).fill(false);
+    state.dismantle.loading = new Array(dismantleTotal).fill(false);
+    state.dismantle.isExactDrawn = false;
+    state.dismantle.needsRedraw = false;
 
-    // Load initial 1-40 frames
-    for (let i = 1; i <= initialBatchCount; i++) {
-      const img = new Image();
-      const frameIdx = i - 1;
-      state.hero.images[frameIdx] = img;
-      img.src = getFramePath(pathTemplate, i);
+    // Initial critical batch:
+    // Hero frames 1 to 24 + Dismantle frames 1 (assembled), 125 (midway), 250 (dismantled)
+    const initialHeroCount = 24;
+    const initialDismantleFrames = [1, 125, 250];
+    const totalInitial = initialHeroCount + initialDismantleFrames.length;
+    let initialLoaded = 0;
 
-      const onLoad = () => {
-        state.hero.loaded[frameIdx] = true;
-        loadedCount++;
-        const pct = Math.min(100, Math.round((loadedCount / initialBatchCount) * 100));
-        if (preloaderLine) preloaderLine.style.width = `${pct}%`;
-        if (preloaderCounter) preloaderCounter.textContent = String(pct).padStart(3, '0');
+    const onBatchItemDone = () => {
+      initialLoaded++;
+      const pct = Math.min(100, Math.round((initialLoaded / totalInitial) * 100));
+      if (preloaderLine) preloaderLine.style.width = `${pct}%`;
+      if (preloaderCounter) preloaderCounter.textContent = String(pct).padStart(3, '0');
 
-        if (loadedCount >= initialBatchCount) {
-          // Preloader exit sequence
-          onPreloaderComplete();
-        }
-      };
-
-      if (img.decode) {
-        img.decode().then(onLoad).catch(onLoad);
-      } else {
-        img.onload = onLoad;
-        img.onerror = onLoad;
+      if (initialLoaded >= totalInitial) {
+        onPreloaderComplete();
       }
+    };
+
+    // Load initial Hero frames
+    for (let i = 1; i <= initialHeroCount; i++) {
+      const idx = i - 1;
+      state.hero.loading[idx] = true;
+      const img = new Image();
+      state.hero.images[idx] = img;
+      const tpl = state.isMobile ? CONFIG.frames.hero.mobilePath : CONFIG.frames.hero.desktopPath;
+      img.src = getFramePath(tpl, i);
+
+      const done = () => {
+        state.hero.loaded[idx] = true;
+        state.hero.loading[idx] = false;
+        onBatchItemDone();
+      };
+      if (img.decode) img.decode().then(done).catch(done);
+      else { img.onload = done; img.onerror = done; }
     }
+
+    // Load initial Dismantle keyframes
+    initialDismantleFrames.forEach((frameNum) => {
+      const idx = frameNum - 1;
+      state.dismantle.loading[idx] = true;
+      const img = new Image();
+      state.dismantle.images[idx] = img;
+      const tpl = state.isMobile ? CONFIG.frames.dismantle.mobilePath : CONFIG.frames.dismantle.desktopPath;
+      img.src = getFramePath(tpl, frameNum);
+
+      const done = () => {
+        state.dismantle.loaded[idx] = true;
+        state.dismantle.loading[idx] = false;
+        onBatchItemDone();
+      };
+      if (img.decode) img.decode().then(done).catch(done);
+      else { img.onload = done; img.onerror = done; }
+    });
 
     function onPreloaderComplete() {
       if (preloaderLine) preloaderLine.classList.add('flash');
       setTimeout(() => {
         if (preloader) preloader.classList.add('fade-out');
-        // Initial draw of first frame
+
+        // Immediately paint initial frames for BOTH canvases
         drawFrame(state.hero, 0);
-        // Continue background loading
+        drawFrame(state.dismantle, 0);
+
+        // Start progressive concurrent background loading
         loadRemainingAssets();
       }, 140);
     }
   }
 
   function loadRemainingAssets() {
-    // 1. Rest of Hero frames (41 to 750)
-    const heroCfg = CONFIG.frames.hero;
-    const heroPath = state.isMobile ? heroCfg.mobilePath : heroCfg.desktopPath;
-    const startHero = (heroCfg.preloadInitial || 40) + 1;
-
-    let idx = startHero;
-    function loadNextHero() {
-      if (idx > heroCfg.count) {
-        loadDismantleAssets();
-        return;
-      }
-      const frameIdx = idx - 1;
-      const img = new Image();
-      state.hero.images[frameIdx] = img;
-      img.src = getFramePath(heroPath, idx);
-      
-      const onDone = () => {
-        state.hero.loaded[frameIdx] = true;
-        idx++;
-        // Use requestIdleCallback or microtask to avoid starving main thread
-        if ('requestIdleCallback' in window) {
-          requestIdleCallback(loadNextHero);
-        } else {
-          setTimeout(loadNextHero, 4);
-        }
-      };
-
-      if (img.decode) {
-        img.decode().then(onDone).catch(onDone);
-      } else {
-        img.onload = onDone;
-        img.onerror = onDone;
-      }
+    // 1. FAST PASS: Dismantle Keyframes (every 5th frame: 5, 10, 15 ... 245)
+    // 50 frames with 8 concurrent connections finish in ~150-200ms
+    const disTotal = CONFIG.frames.dismantle.count;
+    for (let d = 5; d <= disTotal; d += 5) {
+      loadSingleFrame(state.dismantle, d);
     }
-    loadNextHero();
 
-    // 2. Dismantle frames
-    function loadDismantleAssets() {
-      const disCfg = CONFIG.frames.dismantle;
-      const disPath = state.isMobile ? disCfg.mobilePath : disCfg.desktopPath;
-      let dIdx = 1;
+    // 2. FAST PASS: Hero Keyframes (25 to 100, then every 10th frame: 110, 120... 750)
+    const heroTotal = CONFIG.frames.hero.count;
+    for (let h = 25; h <= 100; h++) {
+      loadSingleFrame(state.hero, h);
+    }
+    for (let h = 110; h <= heroTotal; h += 10) {
+      loadSingleFrame(state.hero, h);
+    }
 
-      function loadNextDismantle() {
-        if (dIdx > disCfg.count) return;
-        const frameIdx = dIdx - 1;
-        const img = new Image();
-        state.dismantle.images[frameIdx] = img;
-        img.src = getFramePath(disPath, dIdx);
+    // 3. FULL PASS: All remaining Dismantle frames (fills all gaps so scrubbing is 100% smooth)
+    for (let d = 1; d <= disTotal; d++) {
+      loadSingleFrame(state.dismantle, d);
+    }
 
-        const onDone = () => {
-          state.dismantle.loaded[frameIdx] = true;
-          dIdx++;
-          if ('requestIdleCallback' in window) {
-            requestIdleCallback(loadNextDismantle);
-          } else {
-            setTimeout(loadNextDismantle, 4);
-          }
-        };
+    // 4. FULL PASS: All remaining Hero frames
+    for (let h = 101; h <= heroTotal; h++) {
+      loadSingleFrame(state.hero, h);
+    }
+  }
 
-        if (img.decode) {
-          img.decode().then(onDone).catch(onDone);
-        } else {
-          img.onload = onDone;
-          img.onerror = onDone;
-        }
-      }
-      loadNextDismantle();
+  // Prioritize frames around current scroll target dynamically
+  function prioritizeSurroundingFrames(sectionObj, centerFrame, radius = 12) {
+    const total = sectionObj.cfg.count;
+    const start = Math.max(1, centerFrame - radius);
+    const end = Math.min(total, centerFrame + radius);
+    for (let f = start; f <= end; f++) {
+      loadSingleFrame(sectionObj, f, true); // true = highPriority (unshift to front of queue)
     }
   }
 
@@ -689,6 +757,15 @@
     updateSectionProgress(state.hero, CONFIG.frames.hero.count);
     updateSectionProgress(state.dismantle, CONFIG.frames.dismantle.count);
     updateStatementScroll();
+
+    // DYNAMIC PRIORITY: As user scrolls into or approaches Dismantle, immediately prioritize nearby frames
+    if (state.dismantle.wrapper) {
+      const dRect = state.dismantle.wrapper.getBoundingClientRect();
+      const winH = window.innerHeight;
+      if (dRect.top < winH * 2 && dRect.bottom > -winH) {
+        prioritizeSurroundingFrames(state.dismantle, state.dismantle.targetFrame, 18);
+      }
+    }
   }
 
   function updateSectionProgress(sectionObj, frameCount) {
@@ -730,9 +807,10 @@
       const hero = state.hero;
       hero.currentFrame += (hero.targetFrame - hero.currentFrame) * 0.15;
       const roundedHero = Math.round(hero.currentFrame);
-      if (roundedHero !== hero.lastDrawnFrame) {
-        drawFrame(hero, roundedHero);
-        hero.lastDrawnFrame = roundedHero;
+      if (roundedHero !== hero.lastDrawnFrame || hero.needsRedraw || !hero.isExactDrawn) {
+        if (drawFrame(hero, roundedHero)) {
+          hero.needsRedraw = false;
+        }
       }
       updateHeroHUDAndChapters(hero.progress);
 
@@ -740,9 +818,10 @@
       const dismantle = state.dismantle;
       dismantle.currentFrame += (dismantle.targetFrame - dismantle.currentFrame) * 0.15;
       const roundedDis = Math.round(dismantle.currentFrame);
-      if (roundedDis !== dismantle.lastDrawnFrame) {
-        drawFrame(dismantle, roundedDis);
-        dismantle.lastDrawnFrame = roundedDis;
+      if (roundedDis !== dismantle.lastDrawnFrame || dismantle.needsRedraw || !dismantle.isExactDrawn) {
+        if (drawFrame(dismantle, roundedDis)) {
+          dismantle.needsRedraw = false;
+        }
       }
       updateDismantleCallouts(dismantle.progress);
     }
@@ -756,20 +835,25 @@
   function drawFrame(sectionObj, frameIndex) {
     const canvas = sectionObj.canvas;
     const ctx = sectionObj.ctx;
-    if (!canvas || !ctx) return;
+    if (!canvas || !ctx) return false;
 
-    // Find nearest loaded frame if target frame isn't loaded yet
+    // Find exact or nearest loaded frame
     let img = sectionObj.images[frameIndex];
+    let isExact = true;
     if (!img || !sectionObj.loaded[frameIndex]) {
       img = findNearestLoadedImage(sectionObj, frameIndex);
+      isExact = false;
     }
-    if (!img) return;
+    if (!img) return false;
 
     const cw = canvas.width;
     const ch = canvas.height;
     const iw = img.naturalWidth || img.width;
     const ih = img.naturalHeight || img.height;
-    if (!iw || !ih) return;
+    if (!iw || !ih) return false;
+
+    sectionObj.lastDrawnFrame = frameIndex;
+    sectionObj.isExactDrawn = isExact;
 
     // Clear canvas to asphalt (#07080A)
     ctx.fillStyle = '#07080A';
@@ -804,6 +888,8 @@
         ctx.globalAlpha = 1.0;
       }
     }
+
+    return true;
   }
 
   function findNearestLoadedImage(sectionObj, targetIdx) {
