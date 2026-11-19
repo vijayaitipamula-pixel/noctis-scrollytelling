@@ -115,7 +115,6 @@
   }
 
   function setupSectionHeights() {
-    if (state.prefersReducedMotion) return;
     if (state.hero.wrapper && CONFIG.heights.hero) {
       state.hero.wrapper.style.height = CONFIG.heights.hero;
     }
@@ -772,12 +771,6 @@
     const wrapper = sectionObj.wrapper;
     if (!wrapper) return;
 
-    if (state.prefersReducedMotion) {
-      sectionObj.progress = 0;
-      sectionObj.targetFrame = 0;
-      return;
-    }
-
     const rect = wrapper.getBoundingClientRect();
     const maxScroll = wrapper.offsetHeight - window.innerHeight;
     if (maxScroll <= 0) return;
@@ -803,28 +796,26 @@
     }
 
     // 2. Hero Frame Scrubbing (lerp 0.15)
-    if (!state.prefersReducedMotion) {
-      const hero = state.hero;
-      hero.currentFrame += (hero.targetFrame - hero.currentFrame) * 0.15;
-      const roundedHero = Math.round(hero.currentFrame);
-      if (roundedHero !== hero.lastDrawnFrame || hero.needsRedraw || !hero.isExactDrawn) {
-        if (drawFrame(hero, roundedHero)) {
-          hero.needsRedraw = false;
-        }
+    const hero = state.hero;
+    hero.currentFrame += (hero.targetFrame - hero.currentFrame) * 0.15;
+    const roundedHero = Math.round(hero.currentFrame);
+    if (roundedHero !== hero.lastDrawnFrame || hero.needsRedraw || !hero.isExactDrawn) {
+      if (drawFrame(hero, roundedHero)) {
+        hero.needsRedraw = false;
       }
-      updateHeroHUDAndChapters(hero.progress);
-
-      // 3. Dismantle Frame Scrubbing (lerp 0.15)
-      const dismantle = state.dismantle;
-      dismantle.currentFrame += (dismantle.targetFrame - dismantle.currentFrame) * 0.15;
-      const roundedDis = Math.round(dismantle.currentFrame);
-      if (roundedDis !== dismantle.lastDrawnFrame || dismantle.needsRedraw || !dismantle.isExactDrawn) {
-        if (drawFrame(dismantle, roundedDis)) {
-          dismantle.needsRedraw = false;
-        }
-      }
-      updateDismantleCallouts(dismantle.progress);
     }
+    updateHeroHUDAndChapters(hero.progress);
+
+    // 3. Dismantle Frame Scrubbing (lerp 0.15)
+    const dismantle = state.dismantle;
+    dismantle.currentFrame += (dismantle.targetFrame - dismantle.currentFrame) * 0.15;
+    const roundedDis = Math.round(dismantle.currentFrame);
+    if (roundedDis !== dismantle.lastDrawnFrame || dismantle.needsRedraw || !dismantle.isExactDrawn) {
+      if (drawFrame(dismantle, roundedDis)) {
+        dismantle.needsRedraw = false;
+      }
+    }
+    updateDismantleCallouts(dismantle.progress);
 
     requestAnimationFrame(renderLoop);
   }

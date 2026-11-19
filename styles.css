@@ -1287,13 +1287,6 @@ button {
    ACCESSIBILITY: PREFERS-REDUCED-MOTION
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-
   body {
     cursor: auto !important;
   }
@@ -1302,33 +1295,7 @@ button {
     display: none !important;
   }
 
-  /* No pinning, display in normal static flow */
-  .scrolly-wrapper {
-    height: auto !important;
-  }
-
-  .scrolly-stage {
-    position: relative !important;
-    height: 100vh !important;
-  }
-
-  .reveal-mask > * {
-    transform: none !important;
-    opacity: 1 !important;
-  }
-
-  .hero-chapter {
-    position: relative !important;
-    top: auto !important;
-    left: auto !important;
-    transform: none !important;
-    margin: 40px auto !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-  }
-
-  .lineup-slide {
-    transform: none !important;
-    opacity: 1 !important;
+  .scroll-hint-bar {
+    animation: none !important;
   }
 }
